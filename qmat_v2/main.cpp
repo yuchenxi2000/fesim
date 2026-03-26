@@ -1,6 +1,9 @@
 // 计算dipole相互作用矩阵
 // 目前理论支持所有长方体原胞
 // TODO: 测试lambda默认值的收敛性
+// 
+// Created by yuchenxi2000 on 2021/1/19.
+// Copyright © 2021年 ChenXi Yu. Licensed under MIT License.
 
 #include <iostream>
 #include <cmath>

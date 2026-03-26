@@ -6,7 +6,7 @@
 //  现在能仿真 Nx >= 20 的体系，不用担心内存问题
 //
 //  Created by yuchenxi2000 on 2021/1/30.
-//  Copyright © 2021年 ChenXi Yu. All rights reserved.
+//  Copyright © 2021年 ChenXi Yu. Licensed under MIT License.
 //
 
 #include <iostream>
