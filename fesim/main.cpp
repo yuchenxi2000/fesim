@@ -19,33 +19,21 @@
 // ini
 #include "INIReader.h"
 
-// cblas
-#ifdef __APPLE__
-    // ycx's mac
-    #include <Accelerate/Accelerate.h>
-#elif defined(__linux__) && defined(__INTEL_COMPILER)
-    // PKU HPC
-    #include <cmath>
+// BLAS header: selected by CMake via BLAS_MKL / BLAS_ACCELERATE / BLAS_GENERIC
+#include <cmath>
+#ifdef BLAS_MKL
     #include <mkl.h>
-#elif defined(__WIN32)
-    // Windows
-    #include <cmath>
-    #include <cblas.h>
+#elif defined(BLAS_ACCELERATE)
+    #include <Accelerate/Accelerate.h>
 #else
-    #error "not supported"
+    #include <cblas.h>
 #endif
 
 // util
 #define SQUARE(x) ((x)*(x))
 #define CUBIC(x) ((x)*(x)*(x))
-#ifndef MIN
-    #define MIN(a, b) ((a)<(b)?(a):(b))
-#endif
-#ifndef MAX
-    #define MAX(a, b) ((a)>(b)?(a):(b))
-#endif
 
-
+#include <algorithm>
 // ---------- begin variable def ----------
 
 // random number generator
@@ -622,12 +610,18 @@ bool init_Q0_from_cache_q(const char * file_path) {
         cblas_dscal(N_h, c1, qzx, 1);
         cblas_dscal(N_h, c1, qxy, 1);
         // q to Q0
-        convert_q_to_Q0(qxx, J0xx_r, Nx, Ny, Nz, (double [3]){1.0, 1.0, 1.0});
-        convert_q_to_Q0(qyy, J0yy_r, Nx, Ny, Nz, (double [3]){1.0, 1.0, 1.0});
-        convert_q_to_Q0(qzz, J0zz_r, Nx, Ny, Nz, (double [3]){1.0, 1.0, 1.0});
-        convert_q_to_Q0(qyz, J0yz_r, Nx, Ny, Nz, (double [3]){1.0, -1.0, -1.0});
-        convert_q_to_Q0(qzx, J0zx_r, Nx, Ny, Nz, (double [3]){-1.0, 1.0, -1.0});
-        convert_q_to_Q0(qxy, J0xy_r, Nx, Ny, Nz, (double [3]){-1.0, -1.0, 1.0});
+        double sign_xx[3] = { 1.0,  1.0,  1.0};
+        double sign_yy[3] = { 1.0,  1.0,  1.0};
+        double sign_zz[3] = { 1.0,  1.0,  1.0};
+        double sign_yz[3] = { 1.0, -1.0, -1.0};
+        double sign_zx[3] = {-1.0,  1.0, -1.0};
+        double sign_xy[3] = {-1.0, -1.0,  1.0};
+        convert_q_to_Q0(qxx, J0xx_r, Nx, Ny, Nz, sign_xx);
+        convert_q_to_Q0(qyy, J0yy_r, Nx, Ny, Nz, sign_yy);
+        convert_q_to_Q0(qzz, J0zz_r, Nx, Ny, Nz, sign_zz);
+        convert_q_to_Q0(qyz, J0yz_r, Nx, Ny, Nz, sign_yz);
+        convert_q_to_Q0(qzx, J0zx_r, Nx, Ny, Nz, sign_zx);
+        convert_q_to_Q0(qxy, J0xy_r, Nx, Ny, Nz, sign_xy);
         // free q
         delete [] qxx;
         delete [] qyy;
@@ -1314,7 +1308,7 @@ void sim() {
     double beta = T2beta(T);
     rand_gen rand_g;
     // 1995, Vanderbilt: update eta_h for 2 * Nx times every sweep
-    int eta_h_cnt_per_step = 2 * MAX(MAX(Nx, Ny), Nz);
+    int eta_h_cnt_per_step = 2 * std::max({Nx, Ny, Nz});
     double E0, E1, dE;
     // 我一直不明白为什么要每次“sweep”所有的格点，而且从左向右按顺序扫？那为什么不从右向左呢？这样不是破坏了随机性吗？
     // 然而看了几篇论文全部是这样扫的，于是我也只能这样扫了
@@ -1433,8 +1427,9 @@ int main(int argc, const char * argv[]) {
     //
     printf("[main] openmp processors = %d\n", omp_get_num_procs());
     
-    // init from config
-    if (!read_config("./sim.ini")) {
+    // init from config (argv[1] or default)
+    const char * config_path = argc > 1 ? argv[1] : "./sim.ini";
+    if (!read_config(config_path)) {
         exit(EXIT_FAILURE);
     }
     

@@ -1,20 +1,22 @@
 #!/bin/bash
-#SBATCH -o job.%j.out
-#SBATCH --partition=C032M0128G
-#SBATCH --qos=high
-#SBATCH -J BTO
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=32
+# Cooling-curve simulation: 350 K down to 55 K, 5 K per step.
+# Usage: fill in the variables below, then submit with sbatch or run directly.
 
-module load intel/2018.1
+# ===== user settings =====
+CALC_DIR="/path/to/your/workdir"        # working directory (output goes here)
+MAIN_BIN="/path/to/build/fesim/main"    # FESim binary
+CACHE_Q="/path/to/cache_q_10"           # dipole matrix from QMat
+# =========================
 
-DIR="/gpfs/share/home/{你的目录}"
-cd "$DIR"
+# Load environment (uncomment and adjust for your cluster)
+# module load intel openmpi
 
 SYSTEM_N=10
 T=350
 STEPS=10000
+
+mkdir -p "$CALC_DIR"
+cd "$CALC_DIR" || exit 1
 
 run_sim() {
     mkdir "./$1"
@@ -35,7 +37,7 @@ eta_h2 = 0.012
 eta_h3 = 0.000
 eta_h4 = 0.000
 eta_h5 = 0.000
-q = ./cache_q_10
+q = $CACHE_Q
 
 [sim]
 T = $T
@@ -54,7 +56,7 @@ v = ./$1/out_v.bin
 eta_h = ./$1/out_eta_h.bin
 
 EOF
-        ./main
+        "$MAIN_BIN" ./sim.ini
         cp "./$1/out_u.bin" "./out_u.bin"
         cp "./$1/out_v.bin" "./out_v.bin"
         cp "./$1/out_eta_h.bin" "./out_eta_h.bin"
@@ -70,7 +72,7 @@ Nz = $SYSTEM_N
 u = ./out_u.bin
 v = ./out_v.bin
 eta_h = ./out_eta_h.bin
-q = ./cache_q_10
+q = $CACHE_Q
 
 [sim]
 T = $T
@@ -89,7 +91,7 @@ v = ./$1/out_v.bin
 eta_h = ./$1/out_eta_h.bin
 
 EOF
-        ./main
+        "$MAIN_BIN" ./sim.ini
         cp "./$1/out_u.bin" "./out_u.bin"
         cp "./$1/out_v.bin" "./out_v.bin"
         cp "./$1/out_eta_h.bin" "./out_eta_h.bin"

@@ -10,11 +10,11 @@
 #include <cstring>
 #include <string>
 
-// cblas不同平台的实现
-#if defined(__APPLE__)
-#include <Accelerate/Accelerate.h>
-#elif defined(__INTEL_COMPILER) || defined(__ICC)
+// BLAS header: selected by CMake via BLAS_MKL / BLAS_ACCELERATE / BLAS_GENERIC
+#ifdef BLAS_MKL
 #include <mkl.h>
+#elif defined(BLAS_ACCELERATE)
+#include <Accelerate/Accelerate.h>
 #else
 #include <cblas.h>
 #endif
@@ -22,10 +22,7 @@
 #define SQUARE(x) ((x)*(x))
 #define CUBIC(x) ((x)*(x)*(x))
 
-#if defined(__INTEL_COMPILER)
-#define MAX(a, b) ((a)>(b)?(a):(b))
-#define MIN(a, b) ((a)<(b)?(a):(b))
-#endif
+#include <algorithm>
 
 // mpi
 #include <mpi.h>
@@ -96,17 +93,21 @@ void init_R() {
     }
 }
 
-#if defined(__APPLE__)
-// 函数原型和mkl一致，应对本地mac没有mkl的情况，因为本地只做开发所以就用一个效率低的
-void vdCos(int n, double * a, double * y) {
+#ifndef BLAS_MKL
+// vdCos compatibility layer: MKL provides an optimized vdCos in <mkl.h>.
+// Accelerate has vvcos (same purpose, different signature).
+// Generic CBLAS has no equivalent — use a slow fallback.
+#ifdef BLAS_ACCELERATE
+static inline void vdCos(int n, double * a, double * y) {
+    vvcos(y, a, &n);
+}
+#else
+static void vdCos(int n, double * a, double * y) {
     for (int i = 0; i < n; i++) {
         y[i] = cos(a[i]);
     }
 }
-#elif defined(__INTEL_COMPILER) || defined(__ICC)
-// 用 mkl.h 里的 vdCos
-#else
-#error "not supported"
+#endif
 #endif
 
 double * qxx_r;
@@ -259,23 +260,25 @@ void sum_n(int n) {
 //    cnt++;
 }
 
-#if defined(__APPLE__)
-// 本地开发测试用，垃圾
-void vdLinearFrac(int n, double * a, double * b, double scalea, double shifta, double scaleb, double shiftb, double * y) {
-    for (int i = 0; i < n; i++) {
-        y[i] = (scalea * a[i] + shifta) / (scaleb * b[i] + shiftb);
-    }
+// Element-wise vector division: y[i] = a[i] / b[i]
+#ifdef BLAS_MKL
+static inline void elem_div(int n, double * a, double * b, double * y) {
+    vdDiv(n, a, b, y);
 }
-#elif defined(__INTEL_COMPILER)
-// 用 mkl.h 里的 vdLinearFrac
+#elif defined(BLAS_ACCELERATE)
+static inline void elem_div(int n, double * a, double * b, double * y) {
+    vvdiv(y, a, b, &n);
+}
 #else
-#error "not supported"
+static void elem_div(int n, double * a, double * b, double * y) {
+    for (int i = 0; i < n; i++) y[i] = a[i] / b[i];
+}
 #endif
 
 double * tmp2;
 
 bool q_converged(double * qn, double * q, double tol) {
-    vdLinearFrac(N_h, qn, q, 1.0, 0.0, 1.0, 0.0, tmp2);
+    elem_div(N_h, qn, q, tmp2);
     double err = fabs(tmp2[cblas_idamax(N_h, tmp2, 1)]);
     printf("[proc %d] [init_q] err = %lf\n", world_rank, err);
     return err <= tol;
@@ -409,8 +412,10 @@ int main(int argc, const char * argv[]) {
     
     int config_no_error = 1;
     
+    const char * config_path = argc > 1 ? argv[1] : "./dipole.ini";
+
     if (world_rank == 0) {
-        INIReader reader("./dipole.ini");
+        INIReader reader(config_path);
         if (reader.ParseError() != 0) {
             printf("[ini] incorrect config file\n");
             config_no_error = 0;
@@ -447,7 +452,7 @@ int main(int argc, const char * argv[]) {
                 printf("[ini] q_sum_tol too large\n");
                 config_no_error = 0;
             }
-            lambda = reader.GetReal("dipole", "lambda", sqrt(-log(q_sum_tol))/MIN(MIN(ax, ay), az));
+            lambda = reader.GetReal("dipole", "lambda", sqrt(-log(q_sum_tol))/std::min({ax, ay, az}));
             save_path = reader.Get("output", "q_file_path", "./cache_q");
         }
     }

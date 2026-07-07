@@ -1,0 +1,46 @@
+(base) [ndsim04@th-ex-ln0 fesim]$ cmake -B build -DCMAKE_BUILD_TYPE=Release
+-- The C compiler identification is GNU 8.5.0
+-- The CXX compiler identification is GNU 8.5.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Failed
+-- Looking for pthread_create in pthreads
+-- Looking for pthread_create in pthreads - not found
+-- Looking for pthread_create in pthread
+-- Looking for pthread_create in pthread - found
+-- Found Threads: TRUE  
+-- Looking for sgemm_
+-- Looking for sgemm_ - found
+-- Found BLAS: /fs2/software/intel/2019.4/mkl/lib/intel64_lin/libmkl_intel_lp64.so;/fs2/software/intel/2019.4/mkl/lib/intel64_lin/libmkl_intel_thread.so;/fs2/software/intel/2019.4/mkl/lib/intel64_lin/libmkl_core.so;/fs2/software/intel/2019.4/lib/intel64_lin/libiomp5.so;-lpthread;-lm;-ldl  
+-- BLAS header: BLAS_MKL
+-- Found OpenMP_C: -fopenmp (found version "4.5") 
+-- Found OpenMP_CXX: -fopenmp (found version "4.5") 
+-- Found OpenMP: TRUE (found version "4.5")  
+-- Found MPI_C: /fs2/software/openmpi/5.0.6-mpi-x-icc19.0/lib/libmpi.so (found version "3.1") 
+-- Found MPI_CXX: /fs2/software/openmpi/5.0.6-mpi-x-icc19.0/lib/libmpi.so (found version "3.1") 
+-- Found MPI: TRUE (found version "3.1")  
+-- Configuring done (13.1s)
+-- Generating done (1.0s)
+-- Build files have been written to: /fs2/home/ndsim04/software/fesim/build
+(base) [ndsim04@th-ex-ln0 fesim]$ cmake --build build
+[ 14%] Building C object CMakeFiles/inih.dir/external/inih/ini.c.o
+[ 28%] Building CXX object CMakeFiles/inih.dir/external/inih/cpp/INIReader.cpp.o
+[ 42%] Linking CXX static library libinih.a
+[ 42%] Built target inih
+[ 57%] Building CXX object fesim/CMakeFiles/main.dir/main.cpp.o
+/fs2/home/ndsim04/software/fesim/fesim/main.cpp:24:14: fatal error: mkl.h: No such file or directory
+     #include <mkl.h>
+              ^~~~~~~
+compilation terminated.
+gmake[2]: *** [fesim/CMakeFiles/main.dir/build.make:76: fesim/CMakeFiles/main.dir/main.cpp.o] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:144: fesim/CMakeFiles/main.dir/all] Error 2
+gmake: *** [Makefile:91: all] Error 2

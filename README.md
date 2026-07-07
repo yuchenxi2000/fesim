@@ -1,39 +1,108 @@
 # FESim
 
-BaTiO3铁电仿真，基于有效哈密顿量理论
+BaTiO3 铁电相变仿真，基于有效哈密顿量理论
 
 [English](https://github.com/yuchenxi2000/fesim/blob/main/README_en.md)
 
-## 使用方法
+## 编译
 
-`fesim`目录下是仿真主程序FESim，实现BaTiO3超胞的蒙特卡洛仿真。体系哈密顿量使用[Zhang et al., 1995][1]中的有效哈密顿量。该程序使用CBLAS库实现矩阵计算，OpenMP并行计算哈密顿量。因为不同机器的CBLAS库不同，加上该程序比较简单（只有两个文件），因此这里暂时不给统一的Makefile，可以参考`make.sh`进行编译（针对自己用的超算）。
+本项目使用 CMake 构建。
 
-FESim的配置文件是ini格式，示例运行脚本见`fesim/run-BTO.sh`。该脚本实现了降温过程中铁电相变的仿真，降温的实现是写一个配置文件`sim.ini`并运行仿真程序，固定温度下跑一定仿真步数后，再写一个不同温度的配置文件，继续这一过程。
+```bash
+# 克隆（含 submodule）
+git clone --recurse-submodules https://github.com/yuchenxi2000/fesim.git
+cd fesim
 
-> `fesim/run-BTO.sh`需要跑一天左右（在一个64核机器上）。想快一点可以降低STEPS，但不要小于500，否则无法得到有意义的结果。
+# macOS 本地开发（自动使用 Accelerate + Homebrew OpenMP/MPI）
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 
-`qmat`目录下是计算偶极子相互作用矩阵的程序QMat。QMat计算FESim每个蒙特卡洛步计算能量时需要的偶极子相互作用矩阵，输出一个二进制文件，这个文件在FESim运行时被读取。在有效哈密顿量理论中，相互作用矩阵近似不变，因此提前计算能够减小计算量。该程序依赖CBLAS库和OpenMPI运行库，不同机器的配置不同，需要根据具体配置进行编译，因此目录下给了一些参考的编译脚本。
+# Linux HPC（Intel MKL + OpenMPI）
+module load intel openmpi
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
 
-QMat配置文件是ini格式，示例输入文件见`qmat_v2/dipole.ini`。需要注意，如果想生成FESim所需的相互作用矩阵，晶格常数ax, ay, az必须设置成1.0，因为FESim会自动考虑BaTiO3的晶格常数；并且体系大小Nx, Ny, Nz必须和FESim的输入文件一致。
+CMake 会自动检测 BLAS 库（MKL / Apple Accelerate / OpenBLAS）。输出文件在 `build/fesim/main`（FESim）和 `build/qmat/qmat`（QMat）。
 
-> ini格式读取使用GitHub上一个开源库[inih][2]，只需单个头文件，已经包含在项目文件里
+> 如果自动检测失败，可通过 `-DBLA_VENDOR=Intel10_64lp` 或 `-DBLAS_LIBRARIES=...` 手动指定 BLAS。
+
+以下平台已测试通过：
+
+| 平台 | CPU | 编译器 | BLAS | MPI |
+|------|-----|--------|------|-----|
+| RHEL 8.5 | Xeon Gold 5320 (×2, 52C/104T) | GCC 8.5.0 / ICC 19.0.4 | MKL 2019.4 | OpenMPI 5.0.6 |
+| macOS 26 | Apple M1 Pro (10C) | Apple Clang 21 | Accelerate | OpenMPI 5.0.7 |
+
+## 使用步骤
+
+完整仿真流程分为三步：生成相互作用矩阵 → 蒙特卡洛仿真 → 绘图。
+
+### 1. 计算偶极子相互作用矩阵（QMat）
+
+编辑 `qmat/dipole.ini`，然后运行：
+
+```bash
+mpirun -np 4 build/qmat/qmat qmat/dipole.ini
+```
+
+在当前目录生成二进制 cache 文件。程序使用 MPI 并行，可按核数调整 `-np`。
+
+> **重要**：给 FESim 使用时，`ax = ay = az = 1.0`，因为 FESim 内部会乘上 BaTiO3 晶格常数（7.456 Bohr）。超胞尺寸 `Nx, Ny, Nz` 必须与 FESim 的 `sim.ini` 一致。
+
+### 2. 蒙特卡洛仿真（FESim）
+
+编写 `sim.ini` 配置文件，然后运行：
+
+```bash
+build/fesim/main ./sim.ini
+```
+
+不指定配置文件时默认读取 `./sim.ini`。
+
+`sim.ini` 关键参数：
+
+| 节 | 参数 | 说明 |
+|----|------|------|
+| `[sys]` | `Nx, Ny, Nz` | 超胞尺寸 |
+| `[init]` | `u, v` | `"random"` 随机初始化或 .bin 文件路径 |
+| `[init]` | `q` | QMat 生成的 cache 文件路径 |
+| `[sim]` | `T` | 温度 (K) |
+| `[sim]` | `steps` | 蒙特卡洛步数（建议 ≥ 500） |
+| `[sim]` | `pressure` | 压强（Pa，负值为拉应力） |
+| `[monitor]` | `eta_h, e` | 输出路径和步长间隔 |
+| `[out]` | `u, v, eta_h` | 最终态输出路径 |
+
+降温过程示例见 `fesim/run-BTO.sh`（从 350K 降到 55K）。使用前请修改脚本开头的 `CALC_DIR`、`MAIN_BIN`、`CACHE_Q` 三个变量。
+
+> 10×10×10 超胞跑 10000 步约需一天（64 核）。想快一点可以降低 STEPS，但不要小于 500，否则无法得到有意义的结果。
+
+### 3. 绘图
+
+```bash
+python fesim/plot.py
+```
+
+用 numpy 读取 monitor 输出，matplotlib 绘制应变–温度曲线。
+
+> ini 解析使用 [inih][2] 库（以 git submodule 引入，`external/inih/`）。
 
 ## 原理
 
-这里大概介绍一下仿真BaTiO3铁电相变的原理。首先将哈密顿量近似展开成局域声子模式和应变张量的多项式形式，然后用基于密度泛函理论的第一性原理计算得到其中的系数。声子模式与应变可以认为是晶体内部原子位移的表示，至于为什么选择声子模式与应变而不是简单的原子位移，因为声子模式对称性较高，可以得到简洁的展开式；而且根据软模理论，软声子模式在铁电相变中起主要作用，因此可以只考虑软声子而忽略高阶声子。
+将有效哈密顿量展开为局域软模（local soft mode）和应变张量的多项式，展开系数由第一性原理 DFT 计算得到。选择声子模式而非直接使用原子位移有两个原因：（1）声子模式对称性高，展开式简洁；（2）根据软模理论，铁电相变主要由软声子模式驱动，可忽略高阶声子。
 
-得到哈密顿量后，就可以采用蒙特卡洛模拟或者分子动力学对相变进行仿真。原论文[Zhang et al., 1995][1]采用的是蒙特卡洛模拟。
+得到哈密顿量后，用蒙特卡洛方法（原论文 [Zhang et al., 1995][1] 的方法）进行相变仿真。
 
 ## 结果展示
 
-![](https://github.com/yuchenxi2000/fesim/blob/main/fesim/fig.png)
+![](fesim/fig.png)
 
-10x10x10超胞体系使用`fesim/run-BTO.sh`得到的仿真结果，降温过程中应变随温度的变化。应变反映了晶格常数的变化，展示了降温过程中从C，TO到R相的相变过程。该图像用`fesim/plot.py`绘制。
+10×10×10 超胞降温过程中的应变–温度曲线，展示了 C → T → O → R 的相变过程。由 `fesim/plot.py` 绘制。
 
-![](https://github.com/yuchenxi2000/fesim/blob/main/fesim/fig_prb.png)
+![](fesim/fig_prb.png)
 
-作为对照，上图是[Zhang et al., 1995][1]中的结果。我发现上图中，6个应变分量的顺序貌似和原文定义不一致。原文A部分中定义6个应变分量为exx，eyy，ezz，eyz，ezx，exy。但是图中貌似为exx，eyy，ezz，exy，eyz，ezx。
+作为对照，上图为 [Zhang et al., 1995][1] 的结果。图中 6 个应变分量的顺序疑似与原文定义不一致：原文 A 部分定义为 e<sub>xx</sub>, e<sub>yy</sub>, e<sub>zz</sub>, e<sub>yz</sub>, e<sub>zx</sub>, e<sub>xy</sub>，而图中似乎为 e<sub>xx</sub>, e<sub>yy</sub>, e<sub>zz</sub>, e<sub>xy</sub>, e<sub>yz</sub>, e<sub>zx</sub>。
 
 [1]: https://journals.aps.org/prb/abstract/10.1103/PhysRevB.52.6301 "Effective Hamiltonian theory"
-[2]: https://github.com/benhoyt/inih "Ini library"
+[2]: https://github.com/benhoyt/inih "inih"
 

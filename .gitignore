@@ -1,9 +1,11 @@
-# other versions of QMat
-qmat/
-qmat_v3_alpha/
+# CMake build directory
+build/
+
+# archived versions
+archive/
 
 # exec and test files
-qmat_v2/qmat
+qmat/qmat
 fesim/main_e.cpp
 fesim/main_backup.cpp
 
